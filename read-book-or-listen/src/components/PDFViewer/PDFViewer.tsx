@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface PDFViewerProps {
@@ -11,21 +11,39 @@ interface PDFViewerProps {
 export default function PDFViewer({ pdfUrl, onTextSelect }: PDFViewerProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedText, setSelectedText] = useState('');
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    const handleMouseUp = () => {
-      setTimeout(() => {
-        const selection = window.getSelection();
-        if (selection && selection.toString().trim()) {
-          const text = selection.toString().trim();
-          setSelectedText(text);
-          onTextSelect(text);
-        }
-      }, 100);
+    const handleSelection = () => {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim()) {
+        const text = selection.toString().trim();
+        setSelectedText(text);
+        onTextSelect(text);
+      }
     };
 
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
+    // Add event listener to the iframe's content window
+    const setupIframeListeners = () => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.addEventListener('mouseup', handleSelection);
+      }
+    };
+
+    // Add event listener to the iframe's load event
+    if (iframeRef.current) {
+      iframeRef.current.addEventListener('load', setupIframeListeners);
+    }
+
+    // Cleanup function
+    return () => {
+      if (iframeRef.current) {
+        iframeRef.current.removeEventListener('load', setupIframeListeners);
+        if (iframeRef.current.contentWindow) {
+          iframeRef.current.contentWindow.removeEventListener('mouseup', handleSelection);
+        }
+      }
+    };
   }, [onTextSelect]);
 
   const handleSwipe = (direction: 'left' | 'right') => {
@@ -89,6 +107,7 @@ export default function PDFViewer({ pdfUrl, onTextSelect }: PDFViewerProps) {
         className="w-full h-full"
       >
         <iframe
+          ref={iframeRef}
           src={`${pdfUrl}#page=${currentPage}`}
           className="w-full h-full"
           title="PDF Viewer"
